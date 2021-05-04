@@ -66,26 +66,39 @@ class Anansi(object):
         if self.job_configs['stock']:
             self.stock_lookup(self.job_configs)
             # self.job_configs['stock']['stock_results'] =
-        if self.job_configs['archive']:
-            self.archive_results(self.job_configs)
+        # if self.job_configs['archive']:
+        #     self.archive_results(self.job_configs)
 
     def twitter_api(self, job_configs):
-        self.job_configs = job_configs
-        auth = tweepy.OAuthHandler(self.job_configs['consumer_key'], self.job_configs['consumer_secret'])
-        auth.set_access_token(self.job_configs['access_token'], self.job_configs['secret_token'])
-        api = tweepy.API(auth, wait_on_rate_limit=True)
-        user = api.get_user('1366256262921523205')
-        follow_info = api.followers(user, -1)
-        print(follow_info)
+        pass
+        # self.job_configs = job_configs
+        # auth = tweepy.OAuthHandler(self.job_configs['consumer_key'], self.job_configs['consumer_secret'])
+        # auth.set_access_token(self.job_configs['access_token'], self.job_configs['secret_token'])
+        # api = tweepy.API(auth, wait_on_rate_limit=True)
+        # user = api.get_user('1366256262921523205')
+        # follow_info = api.followers(user, -1)
+        # print(follow_info)
 
     def stock_lookup(self, job_configs):
+
         self.job_configs = job_configs
+        stock_info = {}
+        buffet = ['marketCap', 'priceToSalesTrailing12Months', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'profitMargins',
+                  'sharesOutstanding', 'bookValue', 'heldPercentInstitutions', 'netIncomeToCommon', 'priceToBook',
+                  'heldPercentInsiders', 'enterpriseValue', 'regularMarketPrice', 'sharesShortPriorMonth',
+                  'sharesShort',
+                  'fullTimeEmployees']
+
+        # Get Ticker Info
         ticker = self.job_configs['stock']
         yf_ticker = yf.Ticker(ticker)
         ticker_info = yf_ticker.info
 
-        for key, value in ticker_info.items():
-            print(key, ":", value)
+        # Retrieve selected Ticker Info
+        for buff in buffet:
+            stock_info.update({buff: ticker_info[buff]})
+
+        return self.job_configs.update({ticker: stock_info})
 
     def archive_results(self, job_configs):
         pass
