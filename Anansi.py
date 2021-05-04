@@ -24,13 +24,13 @@ class AnansiParseError(Exception):
 
 class Anansi(object):
 
-    def __init__(self, stock=None, twitter=False, archive=False):
+    def __init__(self, stock=None, twitter=False, twitter_id=None, archive=False):
         # create logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
         plt.style.use('seaborn')
         # Create argument dictionary
-        self.job_configs = {'stock': stock, 'twitter': twitter, 'archive': archive}
+        self.job_configs = {'stock': stock, 'twitter': twitter, 'twitter_id': twitter_id, 'archive': archive}
 
         # Start logging program info
         self.logger.info('Starting up the Anansi.....')
@@ -44,6 +44,7 @@ class Anansi(object):
         self.execute_job(self.read_config_file(self.job_configs))
 
     def read_config_file(self, job_configs):
+
         # Instantiate configparser and read .ini file
         self.job_configs = job_configs
         config = ConfigParser()
@@ -59,29 +60,50 @@ class Anansi(object):
         return self.job_configs
 
     def execute_job(self, job_configs):
+
         self.job_configs = job_configs
-        # if self.job_configs['twitter']:
-        #     self.twitter_api(self.job_configs)
+
+        if self.job_configs['twitter'] and self.job_configs['twitter_id']:
+            results = (self.twitter_api(self.job_configs))
+
+            for key, value in results.items():
+
+                if key == 'username':
+
+                    self.job_configs['twitter_id'] = {value: results}
+                    del(self.job_configs['twitter_id'][value]['username'])
+                    break
 
         if self.job_configs['stock']:
-            self.stock_lookup(self.job_configs)
-            # self.job_configs['stock']['stock_results'] =
-        # if self.job_configs['archive']:
-        #     self.archive_results(self.job_configs)
+            # self.job_configs.update(self.stock_lookup(self.job_configs))
+            results = self.stock_lookup(self.job_configs)
+            for key, value in self.job_configs.items():
+                if key == 'stock':
+                    self.job_configs['stock'] = {value: results}
+                    break
+
+        if self.job_configs['archive']:
+            self.archive_results(self.job_configs)
+
+        self.print_results(self.job_configs)
 
     def twitter_api(self, job_configs):
-        pass
-        # self.job_configs = job_configs
-        # auth = tweepy.OAuthHandler(self.job_configs['consumer_key'], self.job_configs['consumer_secret'])
-        # auth.set_access_token(self.job_configs['access_token'], self.job_configs['secret_token'])
-        # api = tweepy.API(auth, wait_on_rate_limit=True)
-        # user = api.get_user('1366256262921523205')
-        # follow_info = api.followers(user, -1)
-        # print(follow_info)
+
+        self.job_configs = job_configs
+        twitter_info = {}
+        auth = tweepy.OAuthHandler(self.job_configs['consumer_key'], self.job_configs['consumer_secret'])
+        auth.set_access_token(self.job_configs['access_token'], self.job_configs['secret_token'])
+        api = tweepy.API(auth, wait_on_rate_limit=True)
+        user = api.get_user(self.job_configs['twitter_id'])
+        twitter_info['followers_count'] = user.followers_count
+        twitter_info['username'] = user.name
+
+        return twitter_info
 
     def stock_lookup(self, job_configs):
 
         self.job_configs = job_configs
+
         stock_info = {}
         buffet = ['marketCap', 'priceToSalesTrailing12Months', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'profitMargins',
                   'sharesOutstanding', 'bookValue', 'heldPercentInstitutions', 'netIncomeToCommon', 'priceToBook',
@@ -98,7 +120,14 @@ class Anansi(object):
         for buff in buffet:
             stock_info.update({buff: ticker_info[buff]})
 
-        return self.job_configs.update({ticker: stock_info})
+        # self.job_configs.update({ticker: stock_info})
+
+        return stock_info
+
+    def print_results(self, results):
+        self.results = results
+        for key, value in self.results.items():
+            print(key, ':', value)
 
     def archive_results(self, job_configs):
         pass
@@ -112,8 +141,11 @@ if __name__ == '__main__':
                         help='If True, results will be save in Database.')
     parser.add_argument('-s', '--stock', action='store', default=None,
                         help='Stock ticker to lookup.')
-    parser.add_argument('-t', '--twitter', action='store_true', default=False,
+    group = parser.add_argument_group('twitter')
+    group.add_argument('-t', '--twitter', action='store_true', default=False,
                         help='Connect to twitter and retrieve User info.')
+    group.add_argument('-tid', '--twitter_id', action='store', default=None,
+                        help='Twitter ID to look up')
     args = parser.parse_args()
 
     # Logger
@@ -125,7 +157,7 @@ if __name__ == '__main__':
     try:
 
         # Run Anansi...
-        Anansi(stock=args.stock, twitter=args.twitter, archive=args.archive)
+        Anansi(stock=args.stock, twitter=args.twitter, twitter_id=args.twitter_id, archive=args.archive)
 
     except Exception as err:
         logger.error(err)
