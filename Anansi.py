@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from datetime import date
 import sys
 from configparser import ConfigParser
-
+import pprint
 import tweepy as tweepy
 from six import iteritems
 
@@ -31,6 +31,7 @@ class Anansi(object):
         plt.style.use('seaborn')
         # Create argument dictionary
         self.job_configs = {'stock': stock, 'twitter': twitter, 'twitter_id': twitter_id, 'archive': archive}
+        self.results = {}
 
         # Start logging program info
         self.logger.info('Starting up the Anansi.....')
@@ -69,18 +70,14 @@ class Anansi(object):
             for key, value in results.items():
 
                 if key == 'username':
-
                     self.job_configs['twitter_id'] = {value: results}
-                    del(self.job_configs['twitter_id'][value]['username'])
+                    del (self.job_configs['twitter_id'][value]['username'])
                     break
 
         if self.job_configs['stock']:
-            # self.job_configs.update(self.stock_lookup(self.job_configs))
+
             results = self.stock_lookup(self.job_configs)
-            for key, value in self.job_configs.items():
-                if key == 'stock':
-                    self.job_configs['stock'] = {value: results}
-                    break
+            self.job_configs = results
 
         if self.job_configs['archive']:
             self.archive_results(self.job_configs)
@@ -115,19 +112,21 @@ class Anansi(object):
         ticker = self.job_configs['stock']
         yf_ticker = yf.Ticker(ticker)
         ticker_info = yf_ticker.info
-
         # Retrieve selected Ticker Info
         for buff in buffet:
-            stock_info.update({buff: ticker_info[buff]})
+            if buff not in ticker_info:
+                self.logger.warning(f"{buff} Not found in Stock Info.")
+            else:
+                stock_info.update({buff: ticker_info[buff]})
+                # self.job_configs['stock'] = {buff: stock_info}
 
-        # self.job_configs.update({ticker: stock_info})
-
-        return stock_info
+        self.job_configs['stock'] = {ticker: stock_info}
+        self.logger.debug(f'job_configs in stock_lookup: {self.job_configs}')
+        return self.job_configs
 
     def print_results(self, results):
         self.results = results
-        for key, value in self.results.items():
-            print(key, ':', value)
+        pprint.pprint(self.results)
 
     def archive_results(self, job_configs):
         pass
@@ -143,9 +142,9 @@ if __name__ == '__main__':
                         help='Stock ticker to lookup.')
     group = parser.add_argument_group('twitter')
     group.add_argument('-t', '--twitter', action='store_true', default=False,
-                        help='Connect to twitter and retrieve User info.')
+                       help='Connect to twitter and retrieve User info.')
     group.add_argument('-tid', '--twitter_id', action='store', default=None,
-                        help='Twitter ID to look up')
+                       help='Twitter ID to look up')
     args = parser.parse_args()
 
     # Logger
