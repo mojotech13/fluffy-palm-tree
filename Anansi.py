@@ -24,11 +24,11 @@ class AnansiParseError(Exception):
 
 class Anansi(object):
 
-    def __init__(self, stock=None, twitter=False, twitter_id=None, archive=False):
+    def __init__(self, stock, twitter_id, twitter=False, archive=False):
         # create logger
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.INFO)
-        plt.style.use('seaborn')
+
         # Create argument dictionary
         self.job_configs = {'stock': stock, 'twitter': twitter, 'twitter_id': twitter_id, 'archive': archive}
         self.results = {}
@@ -65,20 +65,11 @@ class Anansi(object):
         self.job_configs = job_configs
 
         if self.job_configs['twitter'] and self.job_configs['twitter_id']:
-            results = (self.twitter_api(self.job_configs))
-
-            for key, value in results.items():
-
-                if key == 'username':
-                    self.job_configs['twitter_id'] = {value: results}
-                    del (self.job_configs['twitter_id'][value]['username'])
-                    break
-
+            twitter_info = self.twitter_api(self.job_configs)
+            print(twitter_info)
         if self.job_configs['stock']:
-
-            results = self.stock_lookup(self.job_configs)
-            self.job_configs = results
-
+            stock_info = self.stock_lookup(self.job_configs)
+            print(stock_info)
         if self.job_configs['archive']:
             self.archive_results(self.job_configs)
 
@@ -88,12 +79,24 @@ class Anansi(object):
 
         self.job_configs = job_configs
         twitter_info = {}
+
         auth = tweepy.OAuthHandler(self.job_configs['consumer_key'], self.job_configs['consumer_secret'])
         auth.set_access_token(self.job_configs['access_token'], self.job_configs['secret_token'])
         api = tweepy.API(auth, wait_on_rate_limit=True)
-        user = api.get_user(self.job_configs['twitter_id'])
-        twitter_info['followers_count'] = user.followers_count
-        twitter_info['username'] = user.name
+
+        for tid in self.job_configs['twitter_id']:
+
+            try:
+                user = api.get_user(tid)
+
+            except Exception as e:
+                self.logger.error(e)
+
+            twitter_name = user.name
+            twitter_info.update({twitter_name: {'followers_count': user.followers_count,
+                                                'username': user.name,
+                                                'verified': user.verified,
+                                                'friends_count': user.friends_count}})
 
         return twitter_info
 
@@ -101,28 +104,27 @@ class Anansi(object):
 
         self.job_configs = job_configs
 
-        stock_info = {}
         buffet = ['marketCap', 'priceToSalesTrailing12Months', 'fiftyTwoWeekLow', 'fiftyTwoWeekHigh', 'profitMargins',
                   'sharesOutstanding', 'bookValue', 'heldPercentInstitutions', 'netIncomeToCommon', 'priceToBook',
                   'heldPercentInsiders', 'enterpriseValue', 'regularMarketPrice', 'sharesShortPriorMonth',
-                  'sharesShort',
-                  'fullTimeEmployees']
+                  'sharesShort', 'fullTimeEmployees']
 
         # Get Ticker Info
         ticker = self.job_configs['stock']
-        yf_ticker = yf.Ticker(ticker)
-        ticker_info = yf_ticker.info
-        # Retrieve selected Ticker Info
-        for buff in buffet:
-            if buff not in ticker_info:
-                self.logger.warning(f"{buff} Not found in Stock Info.")
-            else:
-                stock_info.update({buff: ticker_info[buff]})
-                # self.job_configs['stock'] = {buff: stock_info}
+        stock_info = {}
+        ticker_info = {}
 
-        self.job_configs['stock'] = {ticker: stock_info}
-        self.logger.debug(f'job_configs in stock_lookup: {self.job_configs}')
-        return self.job_configs
+        for tick in ticker:
+
+            yf_ticker = yf.Ticker(tick)
+            ticker_info.update({tick: yf_ticker.info})
+            stock_info[tick] = {}
+            for buff in buffet:
+                if buff not in ticker_info[tick]:
+                    self.logger.warning(f"{buff} Not found in Stock ticker: {tick}.")
+                else:
+                    stock_info[tick].update({buff: ticker_info[tick][buff]})
+        return stock_info
 
     def print_results(self, results):
         self.results = results
@@ -138,16 +140,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process user input')
     parser.add_argument('-a', '--archive', action='store_true', default=False,
                         help='If True, results will be save in Database.')
-    parser.add_argument('-s', '--stock', action='store', default=None,
+    parser.add_argument('-s', '--stock', nargs='+', action='store', default=None,
                         help='Stock ticker to lookup.')
     group = parser.add_argument_group('twitter')
     group.add_argument('-t', '--twitter', action='store_true', default=False,
                        help='Connect to twitter and retrieve User info.')
-    group.add_argument('-tid', '--twitter_id', action='store', default=None,
+    group.add_argument('-tid', '--twitter_id', nargs='+', action='store', default=None,
                        help='Twitter ID to look up')
     args = parser.parse_args()
 
-    # Logger
     logging.basicConfig(format='%(asctime)s %(name)s %(levelname)s: '
                                ' %(message)s', stream=sys.stderr)
     logger = logging.getLogger(__name__)
@@ -156,7 +157,8 @@ if __name__ == '__main__':
     try:
 
         # Run Anansi...
-        Anansi(stock=args.stock, twitter=args.twitter, twitter_id=args.twitter_id, archive=args.archive)
+
+        Anansi(stock=args.stock, twitter_id=args.twitter_id, twitter=args.twitter, archive=args.archive)
 
     except Exception as err:
         logger.error(err)
